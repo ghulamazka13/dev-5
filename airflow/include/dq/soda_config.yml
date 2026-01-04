@@ -5,4 +5,3 @@ data_source analytics:
   username: ${SODA_POSTGRES_USERNAME}
   password: ${SODA_POSTGRES_PASSWORD}
   database: ${SODA_POSTGRES_DB}
-  schema: silver

@@ -28,3 +28,6 @@ CREATE INDEX IF NOT EXISTS idx_security_events_raw_severity ON bronze.security_e
 CREATE INDEX IF NOT EXISTS idx_security_events_raw_sensor_type ON bronze.security_events_raw(sensor_type);
 CREATE INDEX IF NOT EXISTS idx_security_events_raw_src_ip ON bronze.security_events_raw(src_ip);
 CREATE INDEX IF NOT EXISTS idx_security_events_raw_dest_ip ON bronze.security_events_raw(dest_ip);
+
+-- RisingWave JDBC sink uses INSERT ... RETURNING, which requires SELECT on target columns.
+GRANT SELECT ON bronze.security_events_raw TO rw_writer;

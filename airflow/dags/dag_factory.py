@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import subprocess
+import sys
 import uuid
 
 from airflow.exceptions import AirflowException
@@ -187,6 +188,8 @@ def volume_check(pipeline_id, bronze_table, **_):
 def run_soda_scan(pipeline_id, **_):
     output_path = f"/tmp/soda_scan_{pipeline_id}.json"
     cmd = [
+        sys.executable,
+        "-m",
         "soda",
         "scan",
         "-d",
@@ -194,9 +197,7 @@ def run_soda_scan(pipeline_id, **_):
         "-c",
         SODA_CONFIG_PATH,
         SODA_CHECKS_PATH,
-        "--format",
-        "json",
-        "--output",
+        "--scan-results-file",
         output_path,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
