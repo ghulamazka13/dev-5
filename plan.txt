@@ -70,7 +70,7 @@ Superset -> connects to Postgres as bi_reader -> only sees gold.*
     03_control_metadata.sql           (control.pipeline_definitions, control.dq_rules, etc.)
     04_monitoring_tables.sql          (monitoring.pipeline_runs, monitoring.lag_metrics, gold.dq_results, etc.)
     05_seed_pipeline_definitions.sql  (insert metadata for security_events pipeline)
-    06_dynamic_dag_metadata.sql     (control.dag_configs, control.datasource_to_dwh_pipelines)
+    06_dynamic_dag_metadata.sql     (control.database_connections, control.dag_configs, control.datasource_to_dwh_pipelines)
 
 /airflow/
   dags/
@@ -223,6 +223,16 @@ IMPORTANT: configure grants so bi_reader can only SELECT gold.* (and optionally 
 7) METADATA-DRIVEN AIRFLOW (DYNAMIC DAGS)
 ========================
 Implement control tables (metadata source of truth):
+- control.database_connections:
+  id (pk)
+  db_name
+  db_type
+  db_host
+  db_port
+  username
+  db_conn_name
+  gsm_path
+
 - control.dag_configs:
   dag_name (pk)
   enabled bool
@@ -236,9 +246,15 @@ Implement control tables (metadata source of truth):
   pipeline_id (pk)
   dag_name (fk)
   enabled bool
-  datasource_table text (bronze)
+  description text
+  source_db_id (fk)
+  target_db_id (fk)
+  source_table_name text
+  source_sql_query text
   datasource_timestamp_column text
-  datawarehouse_table text (gold)
+  target_schema text
+  target_table_name text
+  target_table_schema jsonb
   unique_key text
   merge_window_minutes int
   expected_columns jsonb
@@ -249,8 +265,8 @@ Implement control tables (metadata source of truth):
 Airflow design:
 A) metadata_updater.py
 - Runs every 5 minutes.
-- Reads control.dag_configs + control.datasource_to_dwh_pipelines from Postgres.
-- Writes a "dags" payload to Redis.
+- Uses metadata/query.py (MetadataQuery.datasource_to_dwh) to build the "dags" payload from Postgres.
+- Writes the payload to Redis.
 
 B) main.py (dynamic DAG generator)
 - Loads the Redis payload and calls dag_factory.build_datasource_to_dwh_dag(...) per dag config.
@@ -273,7 +289,7 @@ Use Airflow connections/variables for:
 - Optional alert webhook
 
 ========================
-8) DATA QUALITY (Soda Core)
+8) DATA QUALITY (Soda Core) (Soda Core)
 ========================
 - Provide soda_checks.yml for security_events:
   - No missing event_ts
