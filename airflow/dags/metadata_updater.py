@@ -110,7 +110,47 @@ def _build_payload():
     if not dag_configs:
         return {"dags": []}
     _fetch_pipelines(hook, dag_configs)
-    return {"dags": list(dag_configs.values())}
+    payload = {"dags": list(dag_configs.values())}
+
+    # execute metadata queries from MetadataQuery and include results
+    mq = MetadataQuery()
+    metadata = {}
+    for name in [
+        "dag_registered",
+        "bq",
+        "slave",
+        "db2db",
+        "wait_for_check",
+        "dq",
+        "gsheet",
+        "inbox",
+    ]:
+        sql = getattr(mq, name, None)
+        if not sql:
+            continue
+        try:
+            row = hook.get_first(sql)
+            if not row:
+                metadata[name] = None
+                continue
+            value = row[0]
+            # value is expected to be a JSON string or already a JSON object
+            if isinstance(value, (bytes, bytearray)):
+                value = value.decode()
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                except Exception:
+                    parsed = value
+            else:
+                parsed = value
+            metadata[name] = parsed
+        except Exception as exc:  # pragma: no cover - runtime DB errors
+            logging.exception("Error running metadata query %s: %s", name, exc)
+            metadata[name] = None
+
+    payload["metadata_queries"] = metadata
+    return payload
 
 
 def _write_to_redis(payload):
