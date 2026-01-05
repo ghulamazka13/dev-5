@@ -4,7 +4,7 @@ This repo is an end-to-end open source near real-time analytics POC using a Meda
 
 Dataflow
 - Dummy producer -> Kafka -> Kafka UI -> RisingWave -> Postgres bronze
-- Airflow builds silver and gold, plus monitoring and data quality
+- Airflow metadata-driven generator merges bronze -> gold datawarehouse tables (dedupe/upsert), plus monitoring and data quality
 - Superset reads gold only using bi_reader
 
 ## Quickstart
@@ -29,8 +29,11 @@ docker compose ps
 4) Trigger the pipeline (optional)
 
 ```bash
-docker compose exec -T airflow-webserver airflow dags trigger main_controller_dag
+docker compose exec -T airflow-webserver airflow dags trigger metadata_updater
+docker compose exec -T airflow-webserver airflow dags trigger security_dwh
 ```
+
+If `security_dwh` doesn't appear immediately, wait for the scheduler to pick up the new dynamic DAG.
 
 5) Check data in Postgres
 
@@ -59,8 +62,11 @@ CREATE EXTENSION IF NOT EXISTS pg_duckdb;
 
 ## Airflow metadata-driven pipelines
 - Control tables live in control.*
-- main_controller_dag reads control.pipeline_definitions and builds per-pipeline TaskGroups
-- dag_factory implements lag, schema checks, volume checks, silver/gold builds, DQ, snapshots, and alerts
+- metadata_updater reads control.dag_configs + control.datasource_to_dwh_pipelines and writes a payload to Redis
+- main.py loads the Redis payload and builds dynamic DAGs via dag_factory.build_datasource_to_dwh_dag
+- Update pipeline configs by editing control.* metadata in Postgres
+- Optional: scripts/metadata-generator/main.py exports the Redis payload to JSON under airflow/dags/generated
+- main_controller_dag remains as a legacy medallion demo (not required for the dynamic flow)
 
 ## Superset
 Use the bi_reader account so only gold schema is visible. See superset/bootstrap/README_superset.md.

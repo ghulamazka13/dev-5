@@ -4,6 +4,12 @@ import os
 
 import pendulum
 import redis
+
+try:
+    from metadata.query import MetadataQuery
+except Exception:
+    MetadataQuery = None
+
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
@@ -113,8 +119,11 @@ def _build_payload():
     payload = {"dags": list(dag_configs.values())}
 
     # execute metadata queries from MetadataQuery and include results
-    mq = MetadataQuery()
     metadata = {}
+    if MetadataQuery is None:
+        payload["metadata_queries"] = metadata
+        return payload
+    mq = MetadataQuery()
     for name in [
         "dag_registered",
         "bq",

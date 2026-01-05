@@ -13,9 +13,12 @@ docker compose up -d producer
 echo "Bronze row count:"
 docker compose exec -T postgres psql -U postgres -d analytics -c "SELECT count(*) FROM bronze.security_events_raw;"
 
-echo "Triggering Airflow controller DAG..."
-docker compose exec -T airflow-webserver airflow dags trigger main_controller_dag
+echo "Triggering Airflow metadata updater..."
+docker compose exec -T airflow-webserver airflow dags trigger metadata_updater
+sleep 10
+echo "Triggering dynamic DAG..."
+docker compose exec -T airflow-webserver airflow dags trigger security_dwh
 
-echo "Open Kafka UI: http://localhost:8080"
+echo "Open Kafka UI: http://localhost:18080"
 echo "Open Airflow: http://localhost:8088"
 echo "Open Superset: http://localhost:8089"

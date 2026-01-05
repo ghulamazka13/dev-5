@@ -2,7 +2,7 @@ You are a senior Data Engineer. Build an end-to-end open-source near real-time a
 
 Goal
 - Dummy generator -> Kafka -> Kafka UI -> RisingWave -> PostgreSQL (Bronze raw landing)
-- Airflow orchestrates Silver/Gold transformations, aggregates (5m/1h/daily), backfills, data quality, monitoring/alerts, and optimization tasks.
+- Airflow metadata-driven DAG generator merges bronze -> gold datawarehouse tables (dedupe/upsert), plus backfills, data quality, monitoring/alerts, and optimization tasks.
 - Query engine: PostgreSQL + pg_duckdb (enable extension).
 - BI visualization: Apache Superset (must only access Gold).
 
@@ -42,7 +42,7 @@ Deliverable: generate the full repo file-by-file with paths and full contents.
 Dummy Producer (Python) -> Kafka topic raw.security_events (JSON)
 Kafka UI -> inspect raw.security_events
 RisingWave -> CREATE SOURCE from Kafka -> parse JSON -> sink into Postgres bronze.security_events_raw (append-only)
-Airflow -> build silver + gold + monitoring tables + DQ checks + alerts + snapshots
+Airflow -> merge bronze -> gold datawarehouse tables, plus monitoring/DQ as configured
 Superset -> connects to Postgres as bi_reader -> only sees gold.*
 
 ========================
@@ -70,12 +70,16 @@ Superset -> connects to Postgres as bi_reader -> only sees gold.*
     03_control_metadata.sql           (control.pipeline_definitions, control.dq_rules, etc.)
     04_monitoring_tables.sql          (monitoring.pipeline_runs, monitoring.lag_metrics, gold.dq_results, etc.)
     05_seed_pipeline_definitions.sql  (insert metadata for security_events pipeline)
+    06_dynamic_dag_metadata.sql     (control.dag_configs, control.datasource_to_dwh_pipelines)
 
 /airflow/
   dags/
-    main_controller_dag.py            (reads control.pipeline_definitions; triggers or generates TaskGroups)
-    dag_factory.py                    (function that builds per-pipeline TaskGroup/DAG from metadata)
-    backfill_maintenance_dag.py        (manual/daily maintenance + backfill)
+    main.py                         (loads DAG configs from Redis and builds dynamic DAGs)
+    metadata_updater.py             (reads Postgres control.* metadata -> Redis)
+    generator/metadata_generator.py (optional export of Redis payload to JSON)
+    dag_factory.py                  (function that builds per-pipeline TaskGroup/DAG from metadata)
+    backfill_maintenance_dag.py     (manual/daily maintenance + backfill)
+    main_controller_dag.py          (legacy medallion demo)
   include/
     sql/
       security_events/
@@ -216,56 +220,56 @@ Use pgduckdb/pgduckdb docker image.
 IMPORTANT: configure grants so bi_reader can only SELECT gold.* (and optionally monitoring views meant for BI).
 
 ========================
-7) METADATA-DRIVEN AIRFLOW (MAIN DAG + DAG GENERATOR)
+7) METADATA-DRIVEN AIRFLOW (DYNAMIC DAGS)
 ========================
-Implement control tables:
-- control.pipeline_definitions:
-  pipeline_id (pk)
+Implement control tables (metadata source of truth):
+- control.dag_configs:
+  dag_name (pk)
   enabled bool
   schedule_cron text
-  bronze_table text
-  silver_table text
-  gold_tables jsonb
-  silver_sql_path text
-  gold_sql_paths jsonb
-  dq_profile text
-  sla_minutes int
-  freshness_threshold_minutes int
+  timezone text
   owner text
+  tags jsonb
+  max_active_tasks int
 
-- control.dq_rules (optional):
-  pipeline_id
-  rule_name
-  rule_type (null_rate/allowed_values/volume_drop/schema_drift)
-  params jsonb
-  severity text
+- control.datasource_to_dwh_pipelines:
+  pipeline_id (pk)
+  dag_name (fk)
+  enabled bool
+  datasource_table text (bronze)
+  datasource_timestamp_column text
+  datawarehouse_table text (gold)
+  unique_key text
+  merge_window_minutes int
+  expected_columns jsonb
+  sql_merge_path text
+  freshness_threshold_minutes int
+  sla_minutes int
 
 Airflow design:
-A) main_controller_dag.py
+A) metadata_updater.py
 - Runs every 5 minutes.
-- Reads enabled pipelines from control.pipeline_definitions.
-- For each pipeline, calls dag_factory.build_pipeline_taskgroup(...) to generate a TaskGroup with standard steps.
+- Reads control.dag_configs + control.datasource_to_dwh_pipelines from Postgres.
+- Writes a "dags" payload to Redis.
 
-B) dag_factory.py standard TaskGroup steps (per pipeline)
-1) compute_lag: now() - max(bronze.event_ts); store into monitoring.lag_metrics
-2) schema_drift_check: ensure critical columns exist/types match; store results
-3) volume_check: events in last 5m vs baseline threshold; store results
-4) build_silver: execute silver SQL (incremental upsert from bronze -> silver)
-5) build_gold_5m/1h/daily: execute gold SQL files
-6) run_dq: run Soda Core checks; write results to gold.dq_results; fail on critical
-7) optimize: ANALYZE; (optional VACUUM in daily maintenance DAG)
-8) snapshot: insert into gold.snapshot_runs and snapshot gold outputs (copy or tag run_id)
-9) alerting: if lag/volume/DQ fails, emit alert (log + optional webhook env var)
+B) main.py (dynamic DAG generator)
+- Loads the Redis payload and calls dag_factory.build_datasource_to_dwh_dag(...) per dag config.
+- Pipelines merge/dedupe bronze -> gold datawarehouse tables.
 
-C) backfill_maintenance_dag.py
-- Manual trigger with params start_ts/end_ts and pipeline_id:
-  - Rebuild silver and gold for a date range (idempotent).
-- Daily maintenance:
-  - VACUUM/ANALYZE, optional REINDEX, partition tasks (optional).
+C) dag_factory.py standard TaskGroup steps (per pipeline)
+1) freshness_check
+2) schema_check
+3) merge_to_datawarehouse (dedupe/upsert)
+4) analyze_target
+
+D) generator/metadata_generator.py (optional)
+- Export Redis payload to JSON under airflow/dags/generated for inspection.
+
+E) backfill_maintenance_dag.py (optional)
+- Manual trigger with params start_ts/end_ts and pipeline_id.
 
 Use Airflow connections/variables for:
 - Postgres etl_runner creds
-- Soda checks config
 - Optional alert webhook
 
 ========================
@@ -274,7 +278,7 @@ Use Airflow connections/variables for:
 - Provide soda_checks.yml for security_events:
   - No missing event_ts
   - Allowed severity values
-  - Duplicate event_id == 0 in silver
+  - Duplicate event_id == 0 in gold datawarehouse
   - Volume anomaly (last 5m not below threshold)
 - Run via Airflow task, store results into gold.dq_results and/or monitoring tables.
 
@@ -297,7 +301,7 @@ scripts/smoke_test.sh:
 - start producer
 - verify messages exist via kafka-ui (or kafka CLI)
 - verify risingwave sink writes to bronze (row count increasing)
-- trigger Airflow controller DAG once; verify silver/gold tables populated
+- trigger metadata_updater, then trigger the dynamic DAG; verify gold datawarehouse tables populated
 - connect Superset and run sample queries
 
 ========================

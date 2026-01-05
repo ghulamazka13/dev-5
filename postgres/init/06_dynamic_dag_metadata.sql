@@ -61,10 +61,10 @@ INSERT INTO control.datasource_to_dwh_pipelines (
   'security_events',
   'security_dwh',
   true,
-  'Security events raw to datawarehouse base',
+  'Security events bronze to gold datawarehouse',
   'bronze.security_events_raw',
   'event_ts',
-  'silver.security_events_dwh',
+  'gold.security_events_dwh',
   'event_id',
   10,
   '[

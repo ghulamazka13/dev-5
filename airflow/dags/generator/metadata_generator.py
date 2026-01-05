@@ -1,15 +1,27 @@
-import os
 import json
 import logging
-from typing import Dict, Any
+import os
+from typing import Any, Dict
 
 import redis
 
 LOG = logging.getLogger("metadata_generator")
 
+DEFAULT_REDIS_HOST = os.environ.get("METADATA_REDIS_HOST", "metadata-redis")
+DEFAULT_REDIS_PORT = int(os.environ.get("METADATA_REDIS_PORT", "6379"))
+DEFAULT_REDIS_DB = int(os.environ.get("METADATA_REDIS_DB", "0"))
+DEFAULT_REDIS_KEY = os.environ.get("METADATA_REDIS_KEY", "pipelines")
 
-def fetch_payload_from_redis(host: str = "metadata-redis", port: int = 6379, db: int = 0, key: str = "pipelines") -> Dict[str, Any]:
-    client = redis.Redis(host=host, port=port, db=db, socket_connect_timeout=5, socket_timeout=5)
+
+def fetch_payload_from_redis(
+    host: str = DEFAULT_REDIS_HOST,
+    port: int = DEFAULT_REDIS_PORT,
+    db: int = DEFAULT_REDIS_DB,
+    key: str = DEFAULT_REDIS_KEY,
+) -> Dict[str, Any]:
+    client = redis.Redis(
+        host=host, port=port, db=db, socket_connect_timeout=5, socket_timeout=5
+    )
     raw = client.get(key)
     if not raw:
         LOG.warning("No metadata found in Redis key %s", key)
@@ -23,7 +35,9 @@ def fetch_payload_from_redis(host: str = "metadata-redis", port: int = 6379, db:
         return {}
 
 
-def write_generated_dags(payload: Dict[str, Any], out_dir: str = ".\airflow\dags\generated") -> None:
+def write_generated_dags(payload: Dict[str, Any], out_dir: str = None) -> None:
+    if out_dir is None:
+        out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "generated"))
     os.makedirs(out_dir, exist_ok=True)
     dags = payload.get("dags") or []
     for dag in dags:
@@ -35,11 +49,16 @@ def write_generated_dags(payload: Dict[str, Any], out_dir: str = ".\airflow\dags
         LOG.info("Wrote generated DAG metadata to %s", path)
 
 
-def generate_from_redis(redis_host: str = "metadata-redis", redis_port: int = 6379, redis_db: int = 0, redis_key: str = "pipelines", out_dir: str = None) -> Dict[str, Any]:
-    payload = fetch_payload_from_redis(host=redis_host, port=redis_port, db=redis_db, key=redis_key)
-    if out_dir is None:
-        # default out dir relative to repo root
-        out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "generated"))
+def generate_from_redis(
+    redis_host: str = DEFAULT_REDIS_HOST,
+    redis_port: int = DEFAULT_REDIS_PORT,
+    redis_db: int = DEFAULT_REDIS_DB,
+    redis_key: str = DEFAULT_REDIS_KEY,
+    out_dir: str = None,
+) -> Dict[str, Any]:
+    payload = fetch_payload_from_redis(
+        host=redis_host, port=redis_port, db=redis_db, key=redis_key
+    )
     write_generated_dags(payload, out_dir=out_dir)
     return payload
 
