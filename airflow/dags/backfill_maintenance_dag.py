@@ -1,3 +1,5 @@
+import logging
+
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import ShortCircuitOperator
@@ -19,7 +21,23 @@ def should_backfill(**context):
     pipeline_id = conf.get("pipeline_id", params.get("pipeline_id"))
     start_ts = conf.get("start_ts", params.get("start_ts"))
     end_ts = conf.get("end_ts", params.get("end_ts"))
-    return bool(pipeline_id and start_ts and end_ts)
+    should_run = bool(pipeline_id and start_ts and end_ts)
+    if not pipeline_id:
+        logging.warning("Backfill skipped: missing pipeline_id")
+    if not start_ts or not end_ts:
+        logging.warning(
+            "Backfill skipped: missing window start_ts=%s end_ts=%s",
+            start_ts,
+            end_ts,
+        )
+    logging.info(
+        "Backfill decision pipeline_id=%s start_ts=%s end_ts=%s should_run=%s",
+        pipeline_id,
+        start_ts,
+        end_ts,
+        should_run,
+    )
+    return should_run
 
 
 BACKFILL_SILVER_SQL = """

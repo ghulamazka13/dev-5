@@ -60,6 +60,7 @@ def _fetch_dag_configs(hook):
         ORDER BY dag_name
         """
     )
+    logging.info("Loaded %s DAG configs from control.dag_configs", len(rows))
     dag_configs = {}
     for row in rows:
         dag_id, dag_name, enabled, schedule_cron, timezone, owner, tags, max_active_tasks = row
@@ -117,6 +118,8 @@ def _fetch_pipelines(hook, dag_configs):
         ORDER BY dc.dag_name, p.pipeline_id
         """
     )
+    appended = 0
+    skipped = 0
     for row in rows:
         (
             pipeline_id,
@@ -154,6 +157,7 @@ def _fetch_pipelines(hook, dag_configs):
         )
         dag_cfg = dag_configs.get(dag_id)
         if not dag_cfg:
+            skipped += 1
             continue
         dag_cfg["pipelines"].append(
             {
@@ -177,17 +181,30 @@ def _fetch_pipelines(hook, dag_configs):
                 "sla_minutes": sla_minutes,
             }
         )
+        appended += 1
+    logging.info(
+        "Loaded %s pipelines from control.datasource_to_dwh_pipelines (appended=%s skipped=%s)",
+        len(rows),
+        appended,
+        skipped,
+    )
 
 
 def _fetch_dags_from_metadata_query(hook, mq):
     sql = getattr(mq, "datasource_to_dwh", None)
     if not sql:
+        logging.warning("MetadataQuery.datasource_to_dwh is missing")
         return []
     row = hook.get_first(sql)
     if not row:
+        logging.info("Metadata query returned no rows for datasource_to_dwh")
         return []
     parsed = _parse_json_value(row[0])
-    return parsed if isinstance(parsed, list) else []
+    if not isinstance(parsed, list):
+        logging.warning("Metadata query returned non-list payload")
+        return []
+    logging.info("Loaded %s DAG configs from MetadataQuery.datasource_to_dwh", len(parsed))
+    return parsed
 
 
 def _run_metadata_queries(hook, mq):
@@ -199,6 +216,10 @@ def _run_metadata_queries(hook, mq):
         try:
             row = hook.get_first(sql)
             metadata[name] = _parse_json_value(row[0]) if row else None
+            if metadata[name] is None:
+                logging.warning("Metadata query %s returned no data", name)
+            elif isinstance(metadata[name], list):
+                logging.info("Metadata query %s returned %s rows", name, len(metadata[name]))
         except Exception as exc:  # pragma: no cover - runtime DB errors
             logging.exception("Error running metadata query %s: %s", name, exc)
             metadata[name] = None
@@ -220,13 +241,23 @@ def _build_payload():
 
     if dags:
         payload["dags"] = dags
+        logging.info("Using metadata query payload (dags=%s)", len(dags))
     else:
+        logging.info("Metadata query empty; falling back to control tables")
         dag_configs = _fetch_dag_configs(hook)
         if not dag_configs:
             payload["dags"] = []
         else:
             _fetch_pipelines(hook, dag_configs)
             payload["dags"] = list(dag_configs.values())
+        total_pipelines = sum(
+            len(dag.get("pipelines", [])) for dag in payload.get("dags", [])
+        )
+        logging.info(
+            "Fallback payload built from tables (dags=%s pipelines=%s)",
+            len(payload.get("dags", [])),
+            total_pipelines,
+        )
 
     payload["metadata_queries"] = _run_metadata_queries(hook, mq) if mq else {}
     return payload
@@ -240,10 +271,13 @@ def _write_to_redis(payload):
         socket_connect_timeout=5,
         socket_timeout=5,
     )
-    client.set(REDIS_KEY, json.dumps(payload))
+    payload_json = json.dumps(payload)
+    client.set(REDIS_KEY, payload_json)
+    logging.info("Wrote metadata payload to Redis key %s (bytes=%s)", REDIS_KEY, len(payload_json))
 
 
 def update_metadata():
+    logging.info("Starting metadata refresh into Redis")
     payload = _build_payload()
     _write_to_redis(payload)
     logging.info("Metadata updated in Redis key %s", REDIS_KEY)

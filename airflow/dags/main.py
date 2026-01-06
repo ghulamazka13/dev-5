@@ -38,6 +38,11 @@ SLAVE_GENERATOR = GeneratorPipeline() if GeneratorPipeline else None
 
 
 def _load_metadata_configs():
+    logging.info(
+        "Loading metadata configs source=%s redis_key=%s",
+        METADATA_SOURCE,
+        REDIS_KEY,
+    )
     return DATASOURCE_GENERATOR.load_configs(
         source=METADATA_SOURCE,
         redis_key=REDIS_KEY,
@@ -46,7 +51,13 @@ def _load_metadata_configs():
 
 def _build_metadata_dag(dag_cfg: Dict[str, Any]):
     pipelines = dag_cfg.get("pipelines") or []
+    logging.info(
+        "Building DAG %s with %s pipelines",
+        dag_cfg.get("dag_name") or dag_cfg.get("dag_id"),
+        len(pipelines),
+    )
     if SLAVE_GENERATOR and _looks_like_slave(pipelines):
+        logging.info("Using slave generator for DAG %s", dag_cfg.get("dag_name"))
         default_args = {
             "owner": dag_cfg.get("owner", "data-eng"),
             "retries": dag_cfg.get("retries", 1),
@@ -65,6 +76,7 @@ def _build_metadata_dag(dag_cfg: Dict[str, Any]):
 
 def _register_dags(spec: GeneratorSpec, seen: set) -> None:
     dag_cfgs = list(spec.load_configs() or [])
+    logging.info("Registering %s DAG configs for %s", len(dag_cfgs), spec.name)
     if not dag_cfgs:
         logging.warning("No DAG configs loaded for %s", spec.name)
     for dag_cfg in dag_cfgs:
@@ -86,6 +98,7 @@ def _register_dags(spec: GeneratorSpec, seen: set) -> None:
             continue
         globals()[dag_name] = dag
         seen.add(dag_name)
+        logging.info("Registered DAG %s from %s", dag_name, spec.name)
 
 
 def _load_generators() -> None:

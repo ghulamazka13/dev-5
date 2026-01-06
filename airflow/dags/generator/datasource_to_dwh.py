@@ -213,6 +213,7 @@ def _render_merge_sql(template_path, replacements):
 
 def start_pipeline_run(pipeline_id, **context):
     run_id = context["run_id"]
+    logging.info("Starting pipeline run %s for %s", run_id, pipeline_id)
     hook = _get_hook()
     hook.run(
         """
@@ -229,8 +230,15 @@ def end_pipeline_run(pipeline_id, **context):
     run_id = context["run_id"]
     dag_run = context["dag_run"]
     tis = dag_run.get_task_instances()
-    failed = any(ti.state == State.FAILED for ti in tis)
-    status = "failed" if failed else "success"
+    failed_tasks = [ti.task_id for ti in tis if ti.state == State.FAILED]
+    status = "failed" if failed_tasks else "success"
+    logging.info(
+        "Ending pipeline run %s for %s status=%s failed_tasks=%s",
+        run_id,
+        pipeline_id,
+        status,
+        failed_tasks,
+    )
     hook = _get_hook()
     hook.run(
         """
@@ -243,6 +251,7 @@ def end_pipeline_run(pipeline_id, **context):
 
 
 def compute_lag(pipeline_id, bronze_table, **_):
+    logging.info("Computing lag metrics for %s from %s", pipeline_id, bronze_table)
     hook = _get_hook()
     row = hook.get_first(f"SELECT max(event_ts) FROM {bronze_table}")
     max_ts = row[0] if row else None
@@ -261,6 +270,12 @@ def compute_lag(pipeline_id, bronze_table, **_):
         """,
         parameters=(pipeline_id, max_ts, lag_seconds),
     )
+    logging.info(
+        "Lag metrics for %s: max_event_ts=%s lag_seconds=%s",
+        pipeline_id,
+        max_ts,
+        lag_seconds,
+    )
 
 def schema_drift_check(
     pipeline_id,
@@ -269,6 +284,7 @@ def schema_drift_check(
     expected_columns=None,
     **_,
 ):
+    logging.info("Running schema drift check for %s on %s", pipeline_id, bronze_table)
     schema_name, table_name = bronze_table.split(".")
     hook = _get_hook()
     rows = hook.get_records(
@@ -293,13 +309,17 @@ def schema_drift_check(
     if not columns:
         logging.info("Schema drift check skipped for %s: no expected schema", pipeline_id)
         return
+    missing_count = 0
+    mismatch_count = 0
     for column_name in columns:
         actual_type = actual.get(column_name)
         expected_type = expected_map.get(column_name)
         if actual_type is None:
             status = "missing"
+            missing_count += 1
         elif expected_type and actual_type != expected_type:
             status = "mismatch"
+            mismatch_count += 1
         else:
             status = "ok"
         hook.run(
@@ -310,9 +330,17 @@ def schema_drift_check(
             """,
             parameters=(pipeline_id, column_name, expected_type, actual_type, status),
         )
+    logging.info(
+        "Schema drift recorded for %s: columns=%s missing=%s mismatch=%s",
+        pipeline_id,
+        len(columns),
+        missing_count,
+        mismatch_count,
+    )
 
 
 def volume_check(pipeline_id, bronze_table, **_):
+    logging.info("Running volume check for %s on %s", pipeline_id, bronze_table)
     hook = _get_hook()
     recent = hook.get_first(
         f"""
@@ -340,10 +368,18 @@ def volume_check(pipeline_id, bronze_table, **_):
         """,
         parameters=(pipeline_id, 5, recent, baseline, status),
     )
+    logging.info(
+        "Volume check for %s: recent=%s baseline=%s status=%s",
+        pipeline_id,
+        recent,
+        baseline,
+        status,
+    )
 
 
 def run_soda_scan(pipeline_id, **_):
     output_path = f"/tmp/soda_scan_{pipeline_id}.json"
+    logging.info("Running Soda scan for %s output=%s", pipeline_id, output_path)
     cmd = [
         sys.executable,
         "-m",
@@ -358,9 +394,12 @@ def run_soda_scan(pipeline_id, **_):
         output_path,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
+    logging.info("Soda scan for %s finished with code %s", pipeline_id, result.returncode)
     if result.returncode not in (0, 1):
+        logging.error("Soda scan failed for %s: %s", pipeline_id, result.stderr)
         raise AirflowException(f"Soda failed: {result.stderr}")
     if not os.path.exists(output_path):
+        logging.error("Soda output missing for %s", pipeline_id)
         raise AirflowException("Soda output file missing")
 
     with open(output_path, "r", encoding="utf-8") as handle:
@@ -382,8 +421,10 @@ def run_soda_scan(pipeline_id, **_):
         """,
         parameters=(str(uuid.uuid4()), pipeline_id, status, json.dumps(data)),
     )
+    logging.info("Soda scan status for %s: %s", pipeline_id, status)
 
     if failed:
+        logging.error("Data quality checks failed for %s", pipeline_id)
         raise AirflowException("Data quality checks failed")
 
 def alerting(pipeline_id, freshness_threshold_minutes, **context):
@@ -452,6 +493,7 @@ def alerting(pipeline_id, freshness_threshold_minutes, **context):
     if not issues:
         logging.info("No alerts for pipeline %s", pipeline_id)
         return
+    logging.info("Alerts for pipeline %s: %s", pipeline_id, issues)
 
     for alert_type, severity, message in issues:
         hook.run(
@@ -623,6 +665,11 @@ def freshness_check(
     freshness_threshold_minutes,
     **_,
 ):
+    logging.info(
+        "Running freshness check for %s on %s",
+        pipeline_id,
+        datasource_table,
+    )
     datasource_table = _require_qualified_name(datasource_table, "datasource_table")
     ts_col = _require_identifier(
         datasource_timestamp_column, "datasource_timestamp_column"
@@ -633,20 +680,31 @@ def freshness_check(
     )
     lag_seconds = row[0] if row else None
     if lag_seconds is None:
+        logging.error("Freshness check failed for %s: no data", pipeline_id)
         raise AirflowException(
             f"Freshness check failed for {pipeline_id}: no data in {datasource_table}"
         )
     threshold_seconds = int(freshness_threshold_minutes or 0) * 60
     if lag_seconds > threshold_seconds:
+        logging.error(
+            "Freshness check failed for %s: lag=%s threshold=%s",
+            pipeline_id,
+            lag_seconds,
+            threshold_seconds,
+        )
         raise AirflowException(
             f"Freshness check failed for {pipeline_id}: lag {lag_seconds}s exceeds {threshold_seconds}s"
         )
     logging.info(
-        "Freshness check passed for %s: lag_seconds=%s", pipeline_id, lag_seconds
+        "Freshness check passed for %s: lag_seconds=%s threshold_seconds=%s",
+        pipeline_id,
+        lag_seconds,
+        threshold_seconds,
     )
 
 
 def schema_check(pipeline_id, datasource_table, expected_columns, **_):
+    logging.info("Running schema check for %s on %s", pipeline_id, datasource_table)
     datasource_table = _require_qualified_name(datasource_table, "datasource_table")
     expected = _ensure_list(expected_columns)
     if not expected:
@@ -667,6 +725,11 @@ def schema_check(pipeline_id, datasource_table, expected_columns, **_):
     actual = {row[0] for row in rows}
     missing = sorted(set(expected) - actual)
     if missing:
+        logging.error(
+            "Schema check failed for %s: missing columns %s",
+            pipeline_id,
+            missing,
+        )
         raise AirflowException(
             f"Schema check failed for {pipeline_id}: missing columns {missing}"
         )
@@ -684,6 +747,12 @@ def merge_to_datawarehouse(
     sql_merge_path,
     **context,
 ):
+    logging.info(
+        "Starting merge for %s: %s -> %s",
+        pipeline_id,
+        datasource_table,
+        datawarehouse_table,
+    )
     datasource_table = _require_qualified_name(datasource_table, "datasource_table")
     datawarehouse_table = _require_qualified_name(
         datawarehouse_table, "datawarehouse_table"
@@ -697,6 +766,7 @@ def merge_to_datawarehouse(
         for col in _ensure_list(expected_columns)
     ]
     if not columns:
+        logging.error("Merge failed for %s: expected_columns is empty", pipeline_id)
         raise AirflowException(
             f"Merge failed for {pipeline_id}: expected_columns is required"
         )
@@ -712,6 +782,13 @@ def merge_to_datawarehouse(
         )
     else:
         time_filter = f"{ts_col} >= now() - interval '{window_minutes} minutes'"
+    logging.info(
+        "Merge parameters for %s: columns=%s window_minutes=%s time_filter=%s",
+        pipeline_id,
+        len(columns),
+        window_minutes,
+        time_filter,
+    )
     merge_sql = _render_merge_sql(
         sql_merge_path,
         {
