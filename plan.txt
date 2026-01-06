@@ -74,12 +74,11 @@ Superset -> connects to Postgres as bi_reader -> only sees gold.*
 
 /airflow/
   dags/
-    main.py                         (loads DAG configs from Redis and builds dynamic DAGs)
+    main.py                         (loads DAG configs from Postgres with Redis fallback and builds dynamic DAGs)
     metadata_updater.py             (reads Postgres control.* metadata -> Redis)
     generator/metadata_generator.py (optional export of Redis payload to JSON)
-    dag_factory.py                  (function that builds per-pipeline TaskGroup/DAG from metadata)
+    generator/datasource_to_dwh.py  (builds per-pipeline TaskGroup/DAG from metadata)
     backfill_maintenance_dag.py     (manual/daily maintenance + backfill)
-    main_controller_dag.py          (legacy medallion demo)
   include/
     sql/
       security_events/
@@ -269,10 +268,10 @@ A) metadata_updater.py
 - Writes the payload to Redis.
 
 B) main.py (dynamic DAG generator)
-- Loads the Redis payload and calls dag_factory.build_datasource_to_dwh_dag(...) per dag config.
+- Loads metadata from Postgres (Redis fallback) and calls generator/datasource_to_dwh.build_datasource_to_dwh_dag(...) per dag config.
 - Pipelines merge/dedupe bronze -> gold datawarehouse tables.
 
-C) dag_factory.py standard TaskGroup steps (per pipeline)
+C) generator/datasource_to_dwh.py standard TaskGroup steps (per pipeline)
 1) freshness_check
 2) schema_check
 3) merge_to_datawarehouse (dedupe/upsert)

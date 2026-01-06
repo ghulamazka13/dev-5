@@ -63,10 +63,9 @@ CREATE EXTENSION IF NOT EXISTS pg_duckdb;
 ## Airflow metadata-driven pipelines
 - Control tables live in control.*
 - metadata_updater uses metadata/query.py (MetadataQuery.datasource_to_dwh) to read control.database_connections, control.dag_configs, and control.datasource_to_dwh_pipelines, then writes a payload to Redis
-- main.py loads the Redis payload and builds dynamic DAGs via dag_factory.build_datasource_to_dwh_dag
+- main.py loads metadata from Postgres (with Redis fallback) and builds dynamic DAGs via generator/datasource_to_dwh.py
 - Update pipeline configs by editing control.* metadata in Postgres (source_table_name, source_sql_query, target_schema, target_table_schema)
 - Optional: scripts/metadata-generator/main.py exports the Redis payload to JSON under airflow/dags/generated
-- main_controller_dag remains as a legacy medallion demo (not required for the dynamic flow)
 
 ## Superset
 Use the bi_reader account so only gold schema is visible. See superset/bootstrap/README_superset.md.
