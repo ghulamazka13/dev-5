@@ -103,10 +103,34 @@ def _normalize_pipeline_tables(
     )
 
 
-def _fetch_pipelines(hook, dag_configs):
+def _fetch_sql_steps(hook):
     rows = hook.get_records(
         """
-        SELECT p.pipeline_id, p.dag_id, dc.dag_name, p.enabled, p.description,
+        SELECT pipeline_db_id, id, step_name, step_order, sql_text
+        FROM control.datasource_to_dwh_sql_steps
+        WHERE enabled = true
+        ORDER BY pipeline_db_id, step_order, id
+        """
+    )
+    steps = {}
+    for row in rows:
+        pipeline_db_id, step_id, step_name, step_order, sql_text = row
+        steps.setdefault(pipeline_db_id, []).append(
+            {
+                "id": step_id,
+                "step_name": step_name,
+                "step_order": step_order,
+                "sql_text": sql_text,
+            }
+        )
+    logging.info("Loaded %s SQL steps from control.datasource_to_dwh_sql_steps", len(rows))
+    return steps
+
+
+def _fetch_pipelines(hook, dag_configs, sql_steps_map=None):
+    rows = hook.get_records(
+        """
+        SELECT p.pipeline_id, p.id, p.dag_id, dc.dag_name, p.enabled, p.description,
                p.source_table_name, p.source_sql_query, p.datasource_timestamp_column,
                p.target_schema, p.target_table_name, p.target_table_schema,
                p.datasource_table, p.datawarehouse_table,
@@ -120,9 +144,11 @@ def _fetch_pipelines(hook, dag_configs):
     )
     appended = 0
     skipped = 0
+    step_total = 0
     for row in rows:
         (
             pipeline_id,
+            pipeline_db_id,
             dag_id,
             dag_name,
             enabled,
@@ -159,9 +185,14 @@ def _fetch_pipelines(hook, dag_configs):
         if not dag_cfg:
             skipped += 1
             continue
+        sql_steps = []
+        if sql_steps_map and pipeline_db_id in sql_steps_map:
+            sql_steps = sql_steps_map[pipeline_db_id]
+            step_total += len(sql_steps)
         dag_cfg["pipelines"].append(
             {
                 "pipeline_id": pipeline_id,
+                "pipeline_db_id": pipeline_db_id,
                 "dag_id": dag_id,
                 "enabled": bool(enabled),
                 "description": description,
@@ -179,14 +210,16 @@ def _fetch_pipelines(hook, dag_configs):
                 "sql_merge_path": sql_merge_path,
                 "freshness_threshold_minutes": freshness_threshold_minutes,
                 "sla_minutes": sla_minutes,
+                "sql_steps": sql_steps,
             }
         )
         appended += 1
     logging.info(
-        "Loaded %s pipelines from control.datasource_to_dwh_pipelines (appended=%s skipped=%s)",
+        "Loaded %s pipelines from control.datasource_to_dwh_pipelines (appended=%s skipped=%s sql_steps=%s)",
         len(rows),
         appended,
         skipped,
+        step_total,
     )
 
 
@@ -248,7 +281,8 @@ def _build_payload():
         if not dag_configs:
             payload["dags"] = []
         else:
-            _fetch_pipelines(hook, dag_configs)
+            sql_steps_map = _fetch_sql_steps(hook)
+            _fetch_pipelines(hook, dag_configs, sql_steps_map)
             payload["dags"] = list(dag_configs.values())
         total_pipelines = sum(
             len(dag.get("pipelines", [])) for dag in payload.get("dags", [])

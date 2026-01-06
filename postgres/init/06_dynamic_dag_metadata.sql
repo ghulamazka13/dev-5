@@ -44,6 +44,18 @@ CREATE TABLE IF NOT EXISTS control.datasource_to_dwh_pipelines (
   target_table_schema jsonb
 );
 
+CREATE TABLE IF NOT EXISTS control.datasource_to_dwh_sql_steps (
+  id serial PRIMARY KEY,
+  pipeline_db_id int NOT NULL REFERENCES control.datasource_to_dwh_pipelines(id),
+  step_name text NOT NULL,
+  step_order int NOT NULL DEFAULT 1,
+  sql_text text NOT NULL,
+  enabled boolean NOT NULL DEFAULT true
+);
+
+CREATE INDEX IF NOT EXISTS idx_dwh_sql_steps_pipeline
+  ON control.datasource_to_dwh_sql_steps(pipeline_db_id, step_order);
+
 INSERT INTO control.database_connections (
   db_name, db_type, db_host, db_port, username, db_conn_name, gsm_path
 ) VALUES (

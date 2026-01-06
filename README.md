@@ -65,6 +65,7 @@ CREATE EXTENSION IF NOT EXISTS pg_duckdb;
 - metadata_updater uses metadata/query.py (MetadataQuery.datasource_to_dwh) to read control.database_connections, control.dag_configs, and control.datasource_to_dwh_pipelines, then writes a payload to Redis
 - main.py loads metadata from Postgres (with Redis fallback) and builds dynamic DAGs via generator/datasource_to_dwh.py
 - Update pipeline configs by editing control.* metadata in Postgres (source_table_name, source_sql_query, target_schema, target_table_schema)
+- Optional: control.datasource_to_dwh_sql_steps stores per-pipeline SQL transforms that run after the merge
 - Optional: scripts/metadata-generator/main.py exports the Redis payload to JSON under airflow/dags/generated
 
 ## Superset
