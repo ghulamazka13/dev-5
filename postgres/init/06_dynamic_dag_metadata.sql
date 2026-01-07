@@ -161,7 +161,7 @@ INSERT INTO control.datasource_to_dwh_pipelines (
     INSERT ({{COLUMN_LIST}})
     VALUES ({{SOURCE_COLUMN_LIST}});
   $$,
-  2,
+  10,
   10,
   (SELECT id FROM control.database_connections WHERE db_conn_name = 'analytics_db'),
   (SELECT id FROM control.database_connections WHERE db_conn_name = 'analytics_db'),
@@ -288,7 +288,7 @@ INSERT INTO control.datasource_to_dwh_pipelines (
     INSERT ({{COLUMN_LIST}})
     VALUES ({{SOURCE_COLUMN_LIST}});
   $$,
-  2,
+  10,
   10,
   (SELECT id FROM control.database_connections WHERE db_conn_name = 'analytics_db'),
   (SELECT id FROM control.database_connections WHERE db_conn_name = 'analytics_db'),

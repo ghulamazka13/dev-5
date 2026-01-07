@@ -124,6 +124,7 @@ services:
       - AIRFLOW__CORE__FERNET_KEY=H8oF2K4U7b8C3jY2nG9YF0pI5J6kT8mP1qR2sX3u4vE=
       - AIRFLOW__WEBSERVER__SECRET_KEY=airflowsecret
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
       - _AIRFLOW_WWW_USER_USERNAME=admin
       - _AIRFLOW_WWW_USER_PASSWORD=admin
       - _AIRFLOW_WWW_USER_FIRSTNAME=Admin
@@ -160,6 +161,7 @@ services:
       - AIRFLOW__CORE__FERNET_KEY=H8oF2K4U7b8C3jY2nG9YF0pI5J6kT8mP1qR2sX3u4vE=
       - AIRFLOW__WEBSERVER__SECRET_KEY=airflowsecret
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
       - AIRFLOW_CONN_ANALYTICS_DB=postgresql://etl_runner:etl_runner@postgres:5432/analytics
       - METADATA_REDIS_HOST=metadata-redis
       - METADATA_REDIS_PORT=6379
@@ -187,6 +189,7 @@ services:
       - AIRFLOW__CORE__FERNET_KEY=H8oF2K4U7b8C3jY2nG9YF0pI5J6kT8mP1qR2sX3u4vE=
       - AIRFLOW__WEBSERVER__SECRET_KEY=airflowsecret
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
       - AIRFLOW_CONN_ANALYTICS_DB=postgresql://etl_runner:etl_runner@postgres:5432/analytics
       - METADATA_REDIS_HOST=metadata-redis
       - METADATA_REDIS_PORT=6379
