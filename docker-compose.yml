@@ -214,31 +214,34 @@ services:
       - SUPERSET_SECRET_KEY=supersetsecret
       - SUPERSET_LOAD_EXAMPLES=no
       - SUPERSET_ENV=production
-      - SUPERSET_SQLALCHEMY_DATABASE_URI=sqlite:////var/lib/superset/superset.db
-      - SQLALCHEMY_DATABASE_URI=sqlite:////var/lib/superset/superset.db
+      - SUPERSET_SQLALCHEMY_DATABASE_URI=sqlite:////app/superset_home/superset.db
+      - SQLALCHEMY_DATABASE_URI=sqlite:////app/superset_home/superset.db
     volumes:
-      - superset_data:/var/lib/superset
+      - superset_data:/app/superset_home
       - ./superset/superset_config.py:/app/pythonpath/superset_config.py:ro
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      superset-init:
+        condition: service_completed_successfully
 
   superset-init:
     image: apache/superset:4.0.1
-    depends_on:
-      - superset
+    user: "0"
     environment:
       - SUPERSET_SECRET_KEY=supersetsecret
       - SUPERSET_LOAD_EXAMPLES=no
       - SUPERSET_ENV=production
-      - SUPERSET_SQLALCHEMY_DATABASE_URI=sqlite:////var/lib/superset/superset.db
-      - SQLALCHEMY_DATABASE_URI=sqlite:////var/lib/superset/superset.db
+      - SUPERSET_SQLALCHEMY_DATABASE_URI=sqlite:////app/superset_home/superset.db
+      - SQLALCHEMY_DATABASE_URI=sqlite:////app/superset_home/superset.db
     volumes:
-      - superset_data:/var/lib/superset
+      - superset_data:/app/superset_home
       - ./superset/superset_config.py:/app/pythonpath/superset_config.py:ro
     entrypoint: /bin/bash
     command:
       - -c
       - |
+        chown -R superset:superset /app/superset_home
         superset db upgrade
         superset fab create-admin \
           --username admin \
@@ -246,8 +249,10 @@ services:
           --lastname User \
           --email azka.ghulam13@gmail.com \
           --password admin
+        superset db upgrade
         superset init
     restart: "no"
+
 
 volumes:
   postgres_data:
