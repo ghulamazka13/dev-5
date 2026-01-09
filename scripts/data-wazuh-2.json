@@ -1,154 +1,57 @@
 {
-        "partitionID": 0,
-        "offset": 10020,
-        "timestamp": 1767754645481,
-        "compression": "snappy",
-        "isTransactional": false,
-        "headers": [],
-        "key": {
-            "payload": {},
-            "encoding": "none",
-            "schemaId": 0
-        },
-        "value": {
-            "payload": {
-                "destination": {
-                    "port": 443,
-                    "geo": {
-                        "postal_code": "98073",
-                        "country_name": "United States",
-                        "dma_code": 819,
-                        "timezone": "America/Los_Angeles",
-                        "country_iso_code": "US",
-                        "continent_code": "NA",
-                        "region_name": "Washington",
-                        "city_name": "Redmond",
-                        "ip": "52.123.128.14",
-                        "location": {
-                            "lat": 47.6722,
-                            "lon": -122.1257
-                        },
-                        "country_code2": "US",
-                        "latitude": 47.6722,
-                        "region_code": "WA",
-                        "country_code3": "US",
-                        "longitude": -122.1257
-                    },
-                    "ip": "52.123.128.14",
-                    "as": {
-                        "full": "AS8075 MICROSOFT-CORP-MSN-AS-BLOCK"
-                    }
-                },
-                "input": {},
-                "protocol": [
-                    "tcp"
-                ],
-                "tags": [],
-                "@version": "1",
-                "rule": {
-                    "reference": [
-                        "https://docs.zeek.org/en/current/zeek-noticeindex.html"
-                    ],
-                    "license": [
-                        "https://raw.githubusercontent.com/zeek/zeek/master/COPYING"
-                    ],
-                    "name": "Traffic detected to Blacklisted AS 8075 (MICROSOFT-CORP-MSN-AS-BLOCK): Suspicious_Microsoft",
-                    "category": [
-                        "AS_Blacklist"
-                    ],
-                    "author": [
-                        "Zeek"
-                    ]
-                },
-                "rootId": "Czp5Bs1gJNWKWbyGme",
-                "@timestamp": "2026-01-07T02:57:19.846999872Z",
-                "lastPacket": 1767754639846,
-                "event": {
-                    "ingested": "2026-01-07T02:57:25.421Z",
-                    "severity_tags": [
-                        "Notice (other)",
-                        "Outbound traffic"
-                    ],
-                    "category": [
-                        "intrusion_detection",
-                        "network"
-                    ],
-                    "dataset": "notice",
-                    "end": "1767754639846",
-                    "risk_score_norm": 80,
-                    "start": "1767754639846",
-                    "severity": 80,
-                    "kind": "alert",
-                    "risk_score": 80,
-                    "module": "zeek",
-                    "provider": "zeek",
-                    "id": [
-                        "Czp5Bs1gJNWKWbyGme"
-                    ],
-                    "original": "Traffic detected to Blacklisted AS 8075 (MICROSOFT-CORP-MSN-AS-BLOCK): Suspicious_Microsoft",
-                    "hash": "cBAdJLwCBckrL_jwn5NOWQ"
-                },
-                "firstPacket": 1767754639846,
-                "ipProtocol": 6,
-                "agent": {
-                    "name": "orion-sensor02"
-                },
-                "host": {
-                    "name": "orion-sensor02"
-                },
-                "related": {
-                    "ip": [
-                        "52.123.128.14",
-                        "10.2.10.130"
-                    ],
-                    "hosts": [
-                        "orion-sensor02"
-                    ]
-                },
-                "length": 0,
-                "ecs": {
-                    "version": "8.0.0"
-                },
-                "log": {
-                    "file": {
-                        "path": "notice.log"
-                    }
-                },
-                "timestamp": 1767754639846,
-                "node": "orion-sensor02",
-                "zeek": {
-                    "ts": "2026-01-07T02:57:19.846999872Z",
-                    "uid": "Czp5Bs1gJNWKWbyGme",
-                    "notice": {
-                        "msg": "Traffic detected to Blacklisted AS 8075 (MICROSOFT-CORP-MSN-AS-BLOCK): Suspicious_Microsoft",
-                        "actions": [
-                            "Notice::ACTION_LOG"
-                        ],
-                        "dst": "52.123.128.14",
-                        "peer_descr": "worker-1-1",
-                        "p": "443",
-                        "suppress_for": "3600.000000",
-                        "src": "10.2.10.130",
-                        "note": "AS_Blacklist::Malicious_ASN_Detected"
-                    }
-                },
-                "network": {
-                    "iana_number": [
-                        "6"
-                    ],
-                    "community_id": "1:PCWN2rdzLGFNeTcZOuGVv1eP9XU=",
-                    "transport": [
-                        "tcp"
-                    ],
-                    "direction": "outbound",
-                    "type": "ipv4"
-                },
-                "source": {
-                    "ip": "10.2.10.130",
-                    "port": 53803
-                }
-            },
-            "encoding": "json",
-            "schemaId": 0
-        }
-    }
+  "ecs": {
+    "version": "1.6.0"
+  },
+  "log": null,
+  "host": {
+    "ip": "10.110.90.38",
+    "name": "agent7-centos-bash"
+  },
+  "node": "agent7-centos-bash",
+  "rule": {
+    "id": "200178",
+    "name": "Detects suspicious activities as declared by Florian Roth in its 'Best Practice Auditd Configuration'. This includes the detection of the following commands; wget, curl, base64, nc, netcat, ncat, ssh, socat, wireshark, rawshark, rdesktop, nmap.",
+    "level": 12,
+    "ruleset": [
+      "audit",
+      "syscall"
+    ]
+  },
+  "tags": [],
+  "agent": {
+    "ip": "10.110.90.38",
+    "name": "agent7-centos-bash"
+  },
+  "event": {
+    "end": 1767864514640,
+    "hash": "8SQjsWRlaK91JT0oT0QmFw",
+    "kind": "alert",
+    "start": 1767864514640,
+    "module": "audit.log",
+    "dataset": "alert",
+    "ingested": "2026-01-08T09:28:36.229Z",
+    "provider": "wazuh"
+  },
+  "input": null,
+  "length": null,
+  "rootId": null,
+  "message": null,
+  "related": {
+    "ip": [
+      "10.110.90.38"
+    ],
+    "mac": [
+      "bc:24:11:e8:7f:43"
+    ],
+    "hosts": [
+      "agent7-centos-bash"
+    ]
+  },
+  "@version": "1",
+  "timestamp": null,
+  "@timestamp": "2026-01-08T09:28:34.640Z",
+  "ipProtocol": null,
+  "lastPacket": 1767864514640,
+  "firstPacket": 1767864514640,
+  "totDataBytes": null
+}
