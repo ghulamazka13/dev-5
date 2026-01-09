@@ -1,0 +1,150 @@
+{
+        "partitionID": 0,
+        "offset": 90636,
+        "timestamp": 1767945208624,
+        "compression": "snappy",
+        "isTransactional": false,
+        "headers": [],
+        "key": {
+            "payload": {},
+            "encoding": "none",
+            "schemaId": 0
+        },
+        "value": {
+            "payload": {
+                "totDataBytes": 78,
+                "protocol": [
+                    "udp",
+                    "dns"
+                ],
+                "ecs": {
+                    "version": "8.0.0"
+                },
+                "tags": [],
+                "@timestamp": "2026-01-09T07:53:12.387000064Z",
+                "destination": {
+                    "packets": 0,
+                    "mac": [
+                        "33:33:00:01:00:03"
+                    ],
+                    "port": 5355,
+                    "ip": "ff02::1:3",
+                    "bytes": 0
+                },
+                "zeek": {
+                    "uid": "CWVDHLj037LlFJ04a",
+                    "ts": "2026-01-09T07:53:12.387000064Z",
+                    "conn": {
+                        "history": "D",
+                        "conn_state": "S0",
+                        "conn_state_description": "Connection attempt seen, no reply",
+                        "missed_bytes": "0",
+                        "resp_ip_bytes": "0",
+                        "local_resp": "F",
+                        "orig_pkts": "2",
+                        "resp_pkts": "0",
+                        "duration": "0.420037",
+                        "orig_ip_bytes": "174",
+                        "local_orig": "T",
+                        "resp_bytes": "0",
+                        "orig_bytes": "78",
+                        "vlan": "16"
+                    }
+                },
+                "network": {
+                    "packets": 2,
+                    "protocol": [
+                        "dns"
+                    ],
+                    "iana_number": [
+                        "17"
+                    ],
+                    "application": "dns",
+                    "direction": "internal",
+                    "community_id": "1:d6/nee6BRPaZFwwQRblIcXJl+Ls=",
+                    "transport": [
+                        "udp"
+                    ],
+                    "type": "ipv6",
+                    "bytes": 174,
+                    "vlan": {
+                        "id": [
+                            "16"
+                        ]
+                    }
+                },
+                "input": {},
+                "ipProtocol": 17,
+                "client": {
+                    "bytes": 78
+                },
+                "firstPacket": 1767945192387,
+                "event": {
+                    "severity_tags": [
+                        "Connection attempt, no reply"
+                    ],
+                    "category": [
+                        "network"
+                    ],
+                    "hash": "UcOeLd77_PsXBBm5gNBH1A",
+                    "kind": "event",
+                    "end": "1767945192807",
+                    "start": "1767945192387",
+                    "severity": 20,
+                    "duration": 420037000,
+                    "id": [
+                        "CWVDHLj037LlFJ04a"
+                    ],
+                    "provider": "zeek",
+                    "risk_score": 20,
+                    "risk_score_norm": 20,
+                    "dataset": "conn",
+                    "ingested": "2026-01-09T07:53:27.539Z"
+                },
+                "server": {
+                    "bytes": 0
+                },
+                "node": "orion-sensor02",
+                "rootId": "CWVDHLj037LlFJ04a",
+                "agent": {
+                    "name": "orion-sensor02"
+                },
+                "log": {
+                    "file": {
+                        "path": "conn.log"
+                    }
+                },
+                "timestamp": 1767945192387,
+                "host": {
+                    "name": "orion-sensor02"
+                },
+                "related": {
+                    "mac": [
+                        "bc:f1:71:f5:f8:7f",
+                        "33:33:00:01:00:03"
+                    ],
+                    "hosts": [
+                        "orion-sensor02"
+                    ],
+                    "ip": [
+                        "fe80::982d:749a:3e18:c440",
+                        "ff02::1:3"
+                    ]
+                },
+                "length": 420,
+                "@version": "1",
+                "lastPacket": 1767945192807,
+                "source": {
+                    "packets": 2,
+                    "mac": [
+                        "bc:f1:71:f5:f8:7f"
+                    ],
+                    "port": 52177,
+                    "ip": "fe80::982d:749a:3e18:c440",
+                    "bytes": 174
+                }
+            },
+            "encoding": "json",
+            "schemaId": 0
+        }
+    }
