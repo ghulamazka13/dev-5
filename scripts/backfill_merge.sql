@@ -104,4 +104,81 @@ WHERE event_ts >= :'start_ts'::timestamptz
 ORDER BY event_id, event_ts DESC
 ON CONFLICT (event_id) DO NOTHING;
 
+INSERT INTO bronze.zeek_events_raw (
+  event_id,
+  event_ts,
+  event_ingested_ts,
+  event_start_ts,
+  event_end_ts,
+  event_dataset,
+  event_kind,
+  event_module,
+  event_provider,
+  zeek_uid,
+  sensor_name,
+  src_ip,
+  dest_ip,
+  src_port,
+  dest_port,
+  protocol,
+  application,
+  network_type,
+  direction,
+  community_id,
+  bytes,
+  packets,
+  orig_bytes,
+  resp_bytes,
+  orig_pkts,
+  resp_pkts,
+  conn_state,
+  conn_state_description,
+  duration,
+  history,
+  vlan_id,
+  tags,
+  message,
+  raw_data
+)
+SELECT DISTINCT ON (event_id)
+  event_id,
+  event_ts,
+  event_ingested_ts,
+  event_start_ts,
+  event_end_ts,
+  event_dataset,
+  event_kind,
+  event_module,
+  event_provider,
+  zeek_uid,
+  sensor_name,
+  src_ip,
+  dest_ip,
+  src_port,
+  dest_port,
+  protocol,
+  application,
+  network_type,
+  direction,
+  community_id,
+  bytes,
+  packets,
+  orig_bytes,
+  resp_bytes,
+  orig_pkts,
+  resp_pkts,
+  conn_state,
+  conn_state_description,
+  duration,
+  history,
+  vlan_id,
+  tags,
+  message,
+  raw_data
+FROM staging.zeek_events_backfill
+WHERE event_ts >= :'start_ts'::timestamptz
+  AND event_ts < :'end_ts'::timestamptz
+ORDER BY event_id, event_ts DESC
+ON CONFLICT (event_id) DO NOTHING;
+
 COMMIT;

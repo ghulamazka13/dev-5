@@ -7,3 +7,8 @@ checks for gold.wazuh_events_dwh:
   - missing_count(event_id) = 0
   - missing_count(event_ts) = 0
   - duplicate_count(event_id) = 0
+
+checks for gold.zeek_events_dwh:
+  - missing_count(event_id) = 0
+  - missing_count(event_ts) = 0
+  - duplicate_count(event_id) = 0

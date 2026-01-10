@@ -72,7 +72,7 @@ services:
         condition: service_started
     environment:
       - RW_KAFKA_BOOTSTRAP=10.110.12.20:9092
-      - RW_BACKFILL_TOPIC=raw-security-logs
+      - RW_BACKFILL_TOPIC=malcolm-logs
       - RW_BACKFILL_DAYS=7
     volumes:
       - ./risingwave/backfill.sql:/backfill.sql:ro
@@ -104,7 +104,7 @@ services:
         else
           end_ts="$$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         fi
-        topic="$${RW_BACKFILL_TOPIC:-raw-security-logs}"
+        topic="$${RW_BACKFILL_TOPIC:-malcolm-logs}"
         psql -h risingwave -p 4566 -U root -d dev \
           -v start_ts="$${start_ts}" \
           -v end_ts="$${end_ts}" \

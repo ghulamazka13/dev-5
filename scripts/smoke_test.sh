@@ -9,6 +9,7 @@ sleep 30
 echo "Bronze row count:"
 docker compose exec -T postgres psql -U postgres -d analytics -c "SELECT count(*) FROM bronze.suricata_events_raw;"
 docker compose exec -T postgres psql -U postgres -d analytics -c "SELECT count(*) FROM bronze.wazuh_events_raw;"
+docker compose exec -T postgres psql -U postgres -d analytics -c "SELECT count(*) FROM bronze.zeek_events_raw;"
 
 echo "Triggering Airflow metadata updater..."
 docker compose exec -T airflow-webserver airflow dags trigger metadata_updater

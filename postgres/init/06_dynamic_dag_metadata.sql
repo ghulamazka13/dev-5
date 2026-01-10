@@ -234,6 +234,159 @@ INSERT INTO control.datasource_to_dwh_pipelines (
   target_table_name,
   target_table_schema
 ) VALUES (
+  'zeek_events',
+  (SELECT id FROM control.dag_configs WHERE dag_name = 'security_dwh'),
+  true,
+  'Zeek bronze to gold datawarehouse',
+  'bronze.zeek_events_raw',
+  'event_ts',
+  'gold.zeek_events_dwh',
+  'event_id',
+  10,
+  '[
+    "event_id",
+    "event_ts",
+    "event_ingested_ts",
+    "event_start_ts",
+    "event_end_ts",
+    "event_dataset",
+    "event_kind",
+    "event_module",
+    "event_provider",
+    "zeek_uid",
+    "sensor_name",
+    "src_ip",
+    "dest_ip",
+    "src_port",
+    "dest_port",
+    "protocol",
+    "application",
+    "network_type",
+    "direction",
+    "community_id",
+    "bytes",
+    "packets",
+    "orig_bytes",
+    "resp_bytes",
+    "orig_pkts",
+    "resp_pkts",
+    "conn_state",
+    "conn_state_description",
+    "duration",
+    "history",
+    "vlan_id",
+    "tags",
+    "message",
+    "raw_data"
+  ]'::jsonb,
+  $$
+  CREATE TABLE IF NOT EXISTS {{DATAWAREHOUSE_TABLE}} (
+    LIKE {{DATASOURCE_TABLE}} INCLUDING ALL
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS {{UNIQUE_INDEX_NAME}}
+    ON {{DATAWAREHOUSE_TABLE}} ({{UNIQUE_KEY}});
+
+  WITH source_data AS (
+    SELECT {{COLUMN_LIST}}
+    FROM {{DATASOURCE_TABLE}}
+    WHERE {{TIME_FILTER}}
+  )
+  MERGE INTO {{DATAWAREHOUSE_TABLE}} AS target
+  USING source_data AS source
+    ON target.{{UNIQUE_KEY}} = source.{{UNIQUE_KEY}}
+  WHEN MATCHED THEN
+    UPDATE SET
+      {{MERGE_UPDATE_SET}}
+  WHEN NOT MATCHED THEN
+    INSERT ({{COLUMN_LIST}})
+    VALUES ({{SOURCE_COLUMN_LIST}});
+  $$,
+  10,
+  10,
+  (SELECT id FROM control.database_connections WHERE db_conn_name = 'analytics_db'),
+  (SELECT id FROM control.database_connections WHERE db_conn_name = 'analytics_db'),
+  'bronze.zeek_events_raw',
+  'gold',
+  'zeek_events_dwh',
+  '[
+    {"name":"event_id","type":"text"},
+    {"name":"event_ts","type":"timestamptz"},
+    {"name":"event_ingested_ts","type":"timestamptz"},
+    {"name":"event_start_ts","type":"timestamptz"},
+    {"name":"event_end_ts","type":"timestamptz"},
+    {"name":"event_dataset","type":"text"},
+    {"name":"event_kind","type":"text"},
+    {"name":"event_module","type":"text"},
+    {"name":"event_provider","type":"text"},
+    {"name":"zeek_uid","type":"text"},
+    {"name":"sensor_name","type":"text"},
+    {"name":"src_ip","type":"inet"},
+    {"name":"dest_ip","type":"inet"},
+    {"name":"src_port","type":"int"},
+    {"name":"dest_port","type":"int"},
+    {"name":"protocol","type":"text"},
+    {"name":"application","type":"text"},
+    {"name":"network_type","type":"text"},
+    {"name":"direction","type":"text"},
+    {"name":"community_id","type":"text"},
+    {"name":"bytes","type":"bigint"},
+    {"name":"packets","type":"bigint"},
+    {"name":"orig_bytes","type":"bigint"},
+    {"name":"resp_bytes","type":"bigint"},
+    {"name":"orig_pkts","type":"bigint"},
+    {"name":"resp_pkts","type":"bigint"},
+    {"name":"conn_state","type":"text"},
+    {"name":"conn_state_description","type":"text"},
+    {"name":"duration","type":"double precision"},
+    {"name":"history","type":"text"},
+    {"name":"vlan_id","type":"text"},
+    {"name":"tags","type":"jsonb"},
+    {"name":"message","type":"text"},
+    {"name":"raw_data","type":"jsonb"}
+  ]'::jsonb
+)
+ON CONFLICT (pipeline_id) DO UPDATE SET
+  dag_id = EXCLUDED.dag_id,
+  enabled = EXCLUDED.enabled,
+  description = EXCLUDED.description,
+  datasource_table = EXCLUDED.datasource_table,
+  datasource_timestamp_column = EXCLUDED.datasource_timestamp_column,
+  datawarehouse_table = EXCLUDED.datawarehouse_table,
+  unique_key = EXCLUDED.unique_key,
+  merge_window_minutes = EXCLUDED.merge_window_minutes,
+  expected_columns = EXCLUDED.expected_columns,
+  merge_sql_text = EXCLUDED.merge_sql_text,
+  freshness_threshold_minutes = EXCLUDED.freshness_threshold_minutes,
+  sla_minutes = EXCLUDED.sla_minutes,
+  source_db_id = EXCLUDED.source_db_id,
+  target_db_id = EXCLUDED.target_db_id,
+  source_table_name = EXCLUDED.source_table_name,
+  target_schema = EXCLUDED.target_schema,
+  target_table_name = EXCLUDED.target_table_name,
+  target_table_schema = EXCLUDED.target_table_schema;
+
+INSERT INTO control.datasource_to_dwh_pipelines (
+  pipeline_id,
+  dag_id,
+  enabled,
+  description,
+  datasource_table,
+  datasource_timestamp_column,
+  datawarehouse_table,
+  unique_key,
+  merge_window_minutes,
+  expected_columns,
+  merge_sql_text,
+  freshness_threshold_minutes,
+  sla_minutes,
+  source_db_id,
+  target_db_id,
+  source_table_name,
+  target_schema,
+  target_table_name,
+  target_table_schema
+) VALUES (
   'wazuh_events',
   (SELECT id FROM control.dag_configs WHERE dag_name = 'security_dwh'),
   true,
