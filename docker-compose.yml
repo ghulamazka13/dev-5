@@ -28,17 +28,170 @@ services:
       timeout: 5s
       retries: 6
 
-  risingwave:
+  seaweed-master:
+    image: chrislusf/seaweedfs:3.66
+    command: "master -ip=seaweed-master -mdir=/data -port=9333"
+    volumes:
+      - seaweed_master_data:/data
+    restart: unless-stopped
+
+  seaweed-volume:
+    image: chrislusf/seaweedfs:3.66
+    command: "volume -ip=seaweed-volume -mserver=seaweed-master:9333 -dir=/data -port=8080 -max=5"
+    depends_on:
+      - seaweed-master
+    volumes:
+      - seaweed_volume_data:/data
+    restart: unless-stopped
+
+  seaweed-filer:
+    image: chrislusf/seaweedfs:3.66
+    command: "filer -ip=seaweed-filer -master=seaweed-master:9333 -port=8888"
+    depends_on:
+      - seaweed-master
+      - seaweed-volume
+    volumes:
+      - seaweed_filer_data:/data
+    restart: unless-stopped
+
+  seaweed-s3:
+    image: chrislusf/seaweedfs:3.66
+    command: "s3 -ip=seaweed-s3 -filer=seaweed-filer:8888 -port=8333 -config=/etc/seaweedfs/s3.json"
+    depends_on:
+      - seaweed-filer
+    ports:
+      - "8333:8333"
+    volumes:
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    restart: unless-stopped
+
+  rw-etcd:
+    image: quay.io/coreos/etcd:v3.5.9
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+    command:
+      - /usr/local/bin/etcd
+      - --advertise-client-urls
+      - http://0.0.0.0:2379
+      - --listen-client-urls
+      - http://0.0.0.0:2379
+      - --data-dir
+      - /etcd-data
+    volumes:
+      - rw_etcd_data:/etcd-data
+    restart: unless-stopped
+
+  rw-meta:
     image: risingwavelabs/risingwave:v1.7.0
+    command:
+      - meta-node
+      - --listen-address
+      - 0.0.0.0:5690
+      - --advertise-address
+      - rw-meta:5690
+      - --dashboard-address
+      - 0.0.0.0:5691
+      - --backend
+      - etcd
+      - --etcd-endpoints
+      - rw-etcd:2379
+      - --state-store
+      - hummock+s3://risingwave
+    environment:
+      - RW_S3_ENDPOINT=http://seaweed-s3:8333
+      - RW_S3_REGION=us-east-1
+      - RW_S3_ACCESS_KEY=rwadmin
+      - RW_S3_SECRET_KEY=rwadmin
+      - RW_S3_DISABLE_SSL=true
+      - RW_S3_ENABLE_PATH_STYLE=true
+    depends_on:
+      - rw-etcd
+      - seaweed-s3
+    restart: unless-stopped
+
+  rw-frontend:
+    image: risingwavelabs/risingwave:v1.7.0
+    command:
+      - frontend-node
+      - --listen-address
+      - 0.0.0.0:4566
+      - --advertise-address
+      - rw-frontend:4566
+      - --meta-address
+      - rw-meta:5690
+    environment:
+      - RW_S3_ENDPOINT=http://seaweed-s3:8333
+      - RW_S3_REGION=us-east-1
+      - RW_S3_ACCESS_KEY=rwadmin
+      - RW_S3_SECRET_KEY=rwadmin
+      - RW_S3_DISABLE_SSL=true
+      - RW_S3_ENABLE_PATH_STYLE=true
+    depends_on:
+      - rw-meta
     ports:
       - "4566:4566"
+    restart: unless-stopped
+
+  rw-compute:
+    image: risingwavelabs/risingwave:v1.7.0
+    command:
+      - compute-node
+      - --listen-address
+      - 0.0.0.0:5688
+      - --advertise-address
+      - rw-compute:5688
+      - --meta-address
+      - rw-meta:5690
+      - --state-store
+      - hummock+s3://risingwave
+      - --data-directory
+      - /data
+    environment:
+      - RW_S3_ENDPOINT=http://seaweed-s3:8333
+      - RW_S3_REGION=us-east-1
+      - RW_S3_ACCESS_KEY=rwadmin
+      - RW_S3_SECRET_KEY=rwadmin
+      - RW_S3_DISABLE_SSL=true
+      - RW_S3_ENABLE_PATH_STYLE=true
     depends_on:
-      - postgres
+      - rw-meta
+    volumes:
+      - rw_compute_data:/data
+    restart: unless-stopped
+
+  rw-compactor:
+    image: risingwavelabs/risingwave:v1.7.0
+    command:
+      - compactor-node
+      - --listen-address
+      - 0.0.0.0:6660
+      - --advertise-address
+      - rw-compactor:6660
+      - --meta-address
+      - rw-meta:5690
+      - --state-store
+      - hummock+s3://risingwave
+      - --data-directory
+      - /data
+    environment:
+      - RW_S3_ENDPOINT=http://seaweed-s3:8333
+      - RW_S3_REGION=us-east-1
+      - RW_S3_ACCESS_KEY=rwadmin
+      - RW_S3_SECRET_KEY=rwadmin
+      - RW_S3_DISABLE_SSL=true
+      - RW_S3_ENABLE_PATH_STYLE=true
+    depends_on:
+      - rw-meta
+    volumes:
+      - rw_compactor_data:/data
+    restart: unless-stopped
 
   risingwave-init:
     image: postgres:16.3
     depends_on:
-      risingwave:
+      rw-frontend:
         condition: service_started
     environment:
       - RW_KAFKA_BOOTSTRAP=10.110.12.20:9092
@@ -49,26 +202,26 @@ services:
       - -c
       - |
         set -e
-        until pg_isready -h risingwave -p 4566 -U root; do
+        until pg_isready -h rw-frontend -p 4566 -U root; do
           echo "waiting for risingwave..."
           sleep 3
         done
-        if [ -n "$${RW_KAFKA_BOOTSTRAP:-}" ]; then
-          rw_host="$${RW_KAFKA_BOOTSTRAP%:*}"
-          rw_port="$${RW_KAFKA_BOOTSTRAP#*:}"
-          until (echo > /dev/tcp/$${rw_host}/$${rw_port}) >/dev/null 2>&1; do
+        if [ -n "${RW_KAFKA_BOOTSTRAP:-}" ]; then
+          rw_host="${RW_KAFKA_BOOTSTRAP%:*}"
+          rw_port="${RW_KAFKA_BOOTSTRAP#*:}"
+          until (echo > /dev/tcp/${rw_host}/${rw_port}) >/dev/null 2>&1; do
             echo "waiting for redpanda..."
             sleep 3
           done
         fi
-        psql -h risingwave -p 4566 -U root -d dev -f /init_dev.sql
+        psql -h rw-frontend -p 4566 -U root -d dev -f /init_dev.sql
     restart: "no"
 
   risingwave-backfill:
     image: postgres:16.3
     profiles: ["backfill"]
     depends_on:
-      risingwave:
+      rw-frontend:
         condition: service_started
     environment:
       - RW_KAFKA_BOOTSTRAP=10.110.12.20:9092
@@ -81,36 +234,31 @@ services:
       - -c
       - |
         set -e
-        until pg_isready -h risingwave -p 4566 -U root; do
+        until pg_isready -h rw-frontend -p 4566 -U root; do
           echo "waiting for risingwave..."
           sleep 3
         done
-        bootstrap_server="$${RW_KAFKA_BOOTSTRAP:-10.110.12.20:9092}"
-        rw_host="$${bootstrap_server%:*}"
-        rw_port="$${bootstrap_server#*:}"
-        until (echo > /dev/tcp/$${rw_host}/$${rw_port}) >/dev/null 2>&1; do
+        bootstrap_server="${RW_KAFKA_BOOTSTRAP:-10.110.12.20:9092}"
+        rw_host="${bootstrap_server%:*}"
+        rw_port="${bootstrap_server#*:}"
+        until (echo > /dev/tcp/${rw_host}/${rw_port}) >/dev/null 2>&1; do
           echo "waiting for kafka..."
           sleep 3
         done
-        if [ -n "$${RW_BACKFILL_START_TS:-}" ]; then
-          start_ts="$${RW_BACKFILL_START_TS}"
+        if [ -n "${RW_BACKFILL_START_TS:-}" ]; then
+          start_ts="${RW_BACKFILL_START_TS}"
         else
-          days="$${RW_BACKFILL_DAYS:-7}"
-          start_epoch=$$(( $$(date -u +%s) - (days * 86400) ))
-          start_ts="$$(date -u -d @$${start_epoch} +%Y-%m-%dT%H:%M:%SZ)"
+          days="${RW_BACKFILL_DAYS:-7}"
+          start_epoch=$(( $(date -u +%s) - (days * 86400) ))
+          start_ts="$(date -u -d @${start_epoch} +%Y-%m-%dT%H:%M:%SZ)"
         fi
-        if [ -n "$${RW_BACKFILL_END_TS:-}" ]; then
-          end_ts="$${RW_BACKFILL_END_TS}"
+        if [ -n "${RW_BACKFILL_END_TS:-}" ]; then
+          end_ts="${RW_BACKFILL_END_TS}"
         else
-          end_ts="$$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          end_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         fi
-        topic="$${RW_BACKFILL_TOPIC:-malcolm-logs}"
-        psql -h risingwave -p 4566 -U root -d dev \
-          -v start_ts="$${start_ts}" \
-          -v end_ts="$${end_ts}" \
-          -v topic="$${topic}" \
-          -v bootstrap_server="$${bootstrap_server}" \
-          -f /backfill.sql
+        topic="${RW_BACKFILL_TOPIC:-malcolm-logs}"
+        psql -h rw-frontend -p 4566 -U root -d dev           -v start_ts="${start_ts}"           -v end_ts="${end_ts}"           -v topic="${topic}"           -v bootstrap_server="${bootstrap_server}"           -f /backfill.sql
     restart: "no"
 
   airflow-init:
@@ -139,13 +287,7 @@ services:
       - -c
       - |
         airflow db migrate
-        airflow users create \
-          --role Admin \
-          --username "$$_AIRFLOW_WWW_USER_USERNAME" \
-          --password "$$_AIRFLOW_WWW_USER_PASSWORD" \
-          --firstname "$$_AIRFLOW_WWW_USER_FIRSTNAME" \
-          --lastname "$$_AIRFLOW_WWW_USER_LASTNAME" \
-          --email "$$_AIRFLOW_WWW_USER_EMAIL"
+        airflow users create           --role Admin           --username "$$_AIRFLOW_WWW_USER_USERNAME"           --password "$$_AIRFLOW_WWW_USER_PASSWORD"           --firstname "$$_AIRFLOW_WWW_USER_FIRSTNAME"           --lastname "$$_AIRFLOW_WWW_USER_LASTNAME"           --email "$$_AIRFLOW_WWW_USER_EMAIL"
     restart: "no"
 
   airflow-webserver:
@@ -235,7 +377,7 @@ services:
       - SUPERSET_SQLALCHEMY_DATABASE_URI=sqlite:////app/superset_home/superset.db
       - SQLALCHEMY_DATABASE_URI=sqlite:////app/superset_home/superset.db
     volumes:
-      - superset_data:/app/superset_home
+      - ./superset_data:/app/superset_home
       - ./superset/superset_config.py:/app/pythonpath/superset_config.py:ro
     entrypoint: /bin/bash
     command:
@@ -243,12 +385,7 @@ services:
       - |
         chown -R superset:superset /app/superset_home
         superset db upgrade
-        superset fab create-admin \
-          --username admin \
-          --firstname Admin \
-          --lastname User \
-          --email azka.ghulam13@gmail.com \
-          --password admin
+        superset fab create-admin           --username admin           --firstname Admin           --lastname User           --email azka.ghulam13@gmail.com           --password admin
         superset db upgrade
         superset init
     restart: "no"
@@ -257,3 +394,9 @@ services:
 volumes:
   postgres_data:
   superset_data:
+  seaweed_master_data:
+  seaweed_volume_data:
+  seaweed_filer_data:
+  rw_etcd_data:
+  rw_compute_data:
+  rw_compactor_data:

@@ -1,17 +1,6 @@
 -- Template for external Kafka/Redpanda sources.
 -- Replace ALL_CAPS placeholders before running.
 
-DROP SINK IF EXISTS security_events_sink;
-DROP SINK IF EXISTS suricata_events_sink;
-DROP SINK IF EXISTS wazuh_events_sink;
-DROP SINK IF EXISTS zeek_events_sink;
-DROP MATERIALIZED VIEW IF EXISTS security_events_mv;
-DROP MATERIALIZED VIEW IF EXISTS suricata_events;
-DROP MATERIALIZED VIEW IF EXISTS zeek_events;
-DROP MATERIALIZED VIEW IF EXISTS suricata_events_mv;
-DROP MATERIALIZED VIEW IF EXISTS wazuh_events_mv;
-DROP MATERIALIZED VIEW IF EXISTS zeek_events_mv;
-DROP SOURCE IF EXISTS security_events_source;
 
 CREATE SOURCE IF NOT EXISTS security_events_source (
   event jsonb,
