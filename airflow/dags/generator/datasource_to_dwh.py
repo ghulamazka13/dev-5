@@ -752,6 +752,97 @@ def schema_check(pipeline_id, datasource_table, expected_columns, **_):
     logging.info("Schema check passed for %s", pipeline_id)
 
 
+def ensure_target_schema(pipeline_id, datawarehouse_table, target_table_schema, **_):
+    logging.info(
+        "Ensuring target schema for %s on %s", pipeline_id, datawarehouse_table
+    )
+    if not target_table_schema:
+        logging.info(
+            "Target schema check skipped for %s: no target_table_schema", pipeline_id
+        )
+        return
+    datawarehouse_table = _require_qualified_name(
+        datawarehouse_table, "datawarehouse_table"
+    )
+    schema_name, table_name = datawarehouse_table.split(".", 1)
+    _require_identifier(schema_name, "target_schema")
+    _require_identifier(table_name, "target_table_name")
+    normalized_schema = _normalize_schema(target_table_schema)
+    if not normalized_schema:
+        logging.info("Target schema check skipped for %s: empty schema", pipeline_id)
+        return
+    expected = []
+    for entry in normalized_schema:
+        name = entry.get("name")
+        col_type = entry.get("type")
+        if not name:
+            continue
+        if not col_type:
+            raise AirflowException(
+                f"Target schema missing type for {pipeline_id}.{name}"
+            )
+        _require_identifier(name, "target_table_schema")
+        expected.append((name, _normalize_type(col_type)))
+    if not expected:
+        logging.info("Target schema check skipped for %s: no columns", pipeline_id)
+        return
+
+    hook = _get_hook()
+    table_exists = hook.get_first(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = %s AND table_name = %s
+        """,
+        parameters=(schema_name, table_name),
+    )
+    if not table_exists:
+        columns_sql = ",\n  ".join(f"{name} {col_type}" for name, col_type in expected)
+        hook.run(
+            f"CREATE SCHEMA IF NOT EXISTS {schema_name};\n"
+            f"CREATE TABLE IF NOT EXISTS {datawarehouse_table} (\n  {columns_sql}\n);"
+        )
+
+    rows = hook.get_records(
+        """
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_schema = %s AND table_name = %s
+        """,
+        parameters=(schema_name, table_name),
+    )
+    actual = {row[0]: _normalize_type(row[1]) for row in rows}
+    missing = []
+    for name, col_type in expected:
+        actual_type = actual.get(name)
+        if actual_type is None:
+            missing.append((name, col_type))
+        elif actual_type != col_type:
+            raise AirflowException(
+                f"Target schema mismatch for {datawarehouse_table}.{name}: "
+                f"expected {col_type}, found {actual_type}"
+            )
+    if missing:
+        for name, col_type in missing:
+            hook.run(
+                f"ALTER TABLE {datawarehouse_table} "
+                f"ADD COLUMN IF NOT EXISTS {name} {col_type};"
+            )
+        logging.info(
+            "Added %s columns to %s: %s",
+            len(missing),
+            datawarehouse_table,
+            [name for name, _ in missing],
+        )
+    extras = sorted(set(actual) - {name for name, _ in expected})
+    if extras:
+        logging.info(
+            "Target table %s has extra columns not in metadata: %s",
+            datawarehouse_table,
+            extras,
+        )
+
+
 def merge_to_datawarehouse(
     pipeline_id,
     datasource_table,
@@ -769,6 +860,7 @@ def merge_to_datawarehouse(
         datasource_table,
         datawarehouse_table,
     )
+    merge_sql_text = load_sql(merge_sql_text)
     datasource_table = _require_qualified_name(datasource_table, "datasource_table")
     datawarehouse_table = _require_qualified_name(
         datawarehouse_table, "datawarehouse_table"
@@ -889,6 +981,16 @@ def build_datasource_to_dwh_taskgroup(pipeline, dag):
             },
         )
 
+        target_schema_task = PythonOperator(
+            task_id="ensure_target_schema",
+            python_callable=ensure_target_schema,
+            op_kwargs={
+                "pipeline_id": pipeline_id,
+                "datawarehouse_table": datawarehouse_table,
+                "target_table_schema": target_table_schema,
+            },
+        )
+
         merge_task = NoTemplatePythonOperator(
             task_id="merge_to_datawarehouse",
             python_callable=merge_to_datawarehouse,
@@ -910,7 +1012,7 @@ def build_datasource_to_dwh_taskgroup(pipeline, dag):
             sql=f"ANALYZE {datawarehouse_table};",
         )
 
-        gate >> freshness_task >> schema_task >> merge_task >> analyze_task
+        gate >> freshness_task >> schema_task >> target_schema_task >> merge_task >> analyze_task
 
     return taskgroup
 
